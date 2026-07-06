@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["ExpoPeerSyncModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.peersync.ExpoPeerSyncModule"]
+  }
+}
