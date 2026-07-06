@@ -9,6 +9,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 class TCPTransport(
@@ -19,6 +20,7 @@ class TCPTransport(
     private val connections = ConcurrentHashMap<String, Socket>()
     private val writers = ConcurrentHashMap<String, PrintWriter>()
     private val inboundIds = ConcurrentHashMap.newKeySet<String>()
+    private val nextConnectionId = AtomicLong()
 
     fun startServer(): Int {
         val server = ServerSocket(0)
@@ -63,7 +65,11 @@ class TCPTransport(
     }
 
     private fun handleSocket(socket: Socket, inbound: Boolean): String {
-        val connectionId = "${socket.inetAddress.hostAddress}:${socket.port}"
+        // The counter keeps ids unique across reconnects to the same host/port;
+        // otherwise a lingering reader thread's cleanup could tear down the
+        // replacement connection.
+        val connectionId =
+            "${socket.inetAddress.hostAddress}:${socket.port}#${nextConnectionId.incrementAndGet()}"
         connections[connectionId] = socket
         writers[connectionId] = PrintWriter(socket.getOutputStream(), true)
         if (inbound) inboundIds.add(connectionId)

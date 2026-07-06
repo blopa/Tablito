@@ -9,6 +9,14 @@ public class ExpoPeerSyncModule: Module {
   private var connections: [String: NWConnection] = [:]
   private var inboundIds: Set<String> = []
   private var buffers: [String: Data] = [:]
+  private var nextConnectionId = 0
+
+  // The counter keeps ids unique across reconnects to the same endpoint;
+  // otherwise a stale connection's cancel handler could remove its replacement.
+  private func makeConnectionId(for endpoint: NWEndpoint) -> String {
+    nextConnectionId += 1
+    return "\(endpoint)#\(nextConnectionId)"
+  }
 
   public func definition() -> ModuleDefinition {
     Name("ExpoPeerSync")
@@ -150,7 +158,7 @@ public class ExpoPeerSyncModule: Module {
   // MARK: - TCP transport
 
   private func acceptConnection(_ connection: NWConnection) {
-    let connectionId = "\(connection.endpoint)"
+    let connectionId = makeConnectionId(for: connection.endpoint)
     connections[connectionId] = connection
     inboundIds.insert(connectionId)
 
@@ -170,7 +178,7 @@ public class ExpoPeerSyncModule: Module {
   private func connect(toServiceNamed name: String, promise: Promise) {
     let endpoint = NWEndpoint.service(name: name, type: Self.serviceType, domain: "local.", interface: nil)
     let connection = NWConnection(to: endpoint, using: .tcp)
-    let connectionId = "\(endpoint)"
+    let connectionId = makeConnectionId(for: endpoint)
     connections[connectionId] = connection
 
     var settled = false

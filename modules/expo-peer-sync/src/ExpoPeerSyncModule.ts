@@ -4,6 +4,7 @@ import { NativeModule } from 'expo-modules-core/types';
 import {
   Device,
   PeerSyncEvents,
+  PeerSyncOptions,
   SyncAdapter,
   SyncMessage,
   SyncRequest,
@@ -42,7 +43,6 @@ const RESPONSE_TIMEOUT_MS = 10_000;
 
 const RESPONSE_TYPES = new Set<SyncMessage['type']>([
   'HELLO_ACK',
-  'DATABASE_VERSION',
   'CHANGES_RESPONSE',
   'ACK',
   'ERROR',
@@ -51,13 +51,6 @@ const RESPONSE_TYPES = new Set<SyncMessage['type']>([
 function isResponse(message: SyncMessage): message is SyncResponse {
   return RESPONSE_TYPES.has(message.type);
 }
-
-export type PeerSyncOptions = {
-  deviceId: string;
-  deviceName: string;
-  appId: string;
-  adapter: SyncAdapter;
-};
 
 type PendingResponse = {
   expect: SyncResponse['type'];
@@ -185,31 +178,18 @@ export class PeerSync {
     const connectionId = this.deviceToConnection.get(deviceId);
     if (!connectionId) throw new Error(`No connection for device ${deviceId}`);
 
-    const remote = await this.request(
-      connectionId,
-      { type: 'REQUEST_METADATA' },
-      'DATABASE_VERSION'
-    );
-    const localVersion = await this.adapter.getVersion();
-
-    // Pull the peer's changes we don't have yet.
+    // Pull the changes we don't have; the response carries the peer's own
+    // vector, telling us exactly what to push back.
+    const have = await this.adapter.getVersionVector();
     const pulled = await this.request(
       connectionId,
-      { type: 'REQUEST_CHANGES', sinceVersion: localVersion },
+      { type: 'REQUEST_CHANGES', have },
       'CHANGES_RESPONSE'
     );
     await this.adapter.applyChanges(pulled.changes);
 
-    // Push the changes the peer doesn't have yet.
-    const localChanges = await this.adapter.getChanges(remote.version);
-    await this.request(connectionId, { type: 'PUSH_CHANGES', changes: localChanges }, 'ACK');
-
-    const latestVersion = Math.max(
-      localVersion,
-      remote.version,
-      ...pulled.changes.map((change) => change.version)
-    );
-    await this.adapter.setVersion(latestVersion);
+    const toPush = await this.adapter.getChanges(pulled.have);
+    await this.request(connectionId, { type: 'PUSH_CHANGES', changes: toPush }, 'ACK');
   }
 
   private request<T extends SyncResponse['type']>(
@@ -277,13 +257,13 @@ export class PeerSync {
       case 'HELLO':
         this.registerPeer(connectionId, request.deviceId, request.deviceName);
         return { type: 'HELLO_ACK', deviceId: this.deviceId };
-      case 'REQUEST_METADATA':
-        return { type: 'DATABASE_VERSION', version: await this.adapter.getVersion() };
-      case 'REQUEST_CHANGES':
-        return {
-          type: 'CHANGES_RESPONSE',
-          changes: await this.adapter.getChanges(request.sinceVersion),
-        };
+      case 'REQUEST_CHANGES': {
+        const [changes, have] = await Promise.all([
+          this.adapter.getChanges(request.have),
+          this.adapter.getVersionVector(),
+        ]);
+        return { type: 'CHANGES_RESPONSE', changes, have };
+      }
       case 'PUSH_CHANGES':
         await this.adapter.applyChanges(request.changes);
         return { type: 'ACK' };

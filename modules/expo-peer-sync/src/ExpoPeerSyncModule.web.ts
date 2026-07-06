@@ -1,6 +1,8 @@
-import { registerWebModule, NativeModule } from 'expo';
+import { PeerSyncOptions } from './ExpoPeerSync.types';
 
-// ExpoPeerSyncModule is not available on the web platform.
-class ExpoPeerSyncModule extends NativeModule {}
-
-export default registerWebModule(ExpoPeerSyncModule, 'ExpoPeerSyncModule');
+// Local-network discovery and TCP sockets do not exist in browsers.
+export class PeerSync {
+  constructor(_options: PeerSyncOptions) {
+    throw new Error('expo-peer-sync is not available on web');
+  }
+}

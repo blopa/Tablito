@@ -24,6 +24,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./modules/expo-peer-sync/app.plugin.js",
       "expo-router",
       [
         "expo-splash-screen",

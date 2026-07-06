@@ -1,2 +1,2 @@
-export { PeerSync, PeerSyncOptions } from './ExpoPeerSyncModule';
+export { PeerSync } from './ExpoPeerSyncModule';
 export * from './ExpoPeerSync.types';

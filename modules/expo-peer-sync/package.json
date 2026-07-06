@@ -1,7 +1,7 @@
 {
   "name": "expo-peer-sync",
   "version": "0.1.0",
-  "description": "My new module",
+  "description": "Local Wi-Fi peer discovery and data sync for Expo apps",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -19,27 +19,33 @@
     "expo-peer-sync",
     "ExpoPeerSync"
   ],
-  "repository": "https://github.com/apps/google-labs-jules/expo-peer-sync",
-  "bugs": {
-    "url": "https://github.com/apps/google-labs-jules/expo-peer-sync/issues"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blopa/Tablito.git",
+    "directory": "modules/expo-peer-sync"
   },
-  "author": "Open Source <161369871+google-labs-jules[bot]@users.noreply.github.com> (https://github.com/apps/google-labs-jules)",
+  "bugs": {
+    "url": "https://github.com/blopa/Tablito/issues"
+  },
+  "author": "Pablo Pirata <montenegro.pablo@outlook.com>",
   "license": "MIT",
-  "homepage": "https://github.com/apps/google-labs-jules/expo-peer-sync#readme",
+  "homepage": "https://github.com/blopa/Tablito#readme",
   "dependencies": {},
   "devDependencies": {
     "@babel/core": "^7.26.0",
-    "@types/jest": "^29.2.1",
-    "@types/react": "~19.1.1",
-    "babel-preset-expo": "~55.0.8",
+    "@expo/config-plugins": "~57.0.2",
+    "@types/jest": "^29.5.14",
+    "@types/react": "~19.2.2",
+    "babel-preset-expo": "~57.0.1",
     "eslint": "~9.39.4",
     "eslint-config-universe": "^15.0.3",
-    "expo": "^56.0.11",
+    "expo": "~57.0.2",
     "jest": "^29.7.0",
-    "jest-expo": "~55.0.9",
+    "jest-expo": "~57.0.1",
     "prettier": "^3.0.0",
-    "react-native": "0.74.5",
-    "typescript": "^5.9.2"
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "typescript": "~6.0.3"
   },
   "jest": {
     "preset": "jest-expo",

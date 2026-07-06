@@ -1,3 +1,11 @@
+/**
+ * A single mutation to one entity, authored by exactly one device.
+ *
+ * `version` is the author's own monotonically increasing sequence number
+ * (1, 2, 3, ... per device). Combined with `authorId` it identifies the
+ * change globally and lets peers express what they already hold as a
+ * {@link VersionVector}.
+ */
 export type Change<T = unknown> = {
   changeId: string;
   entity: string;
@@ -9,12 +17,31 @@ export type Change<T = unknown> = {
   version: number;
 };
 
+/**
+ * Highest `version` held per `authorId`. A change is covered by a vector
+ * when `change.version <= vector[change.authorId]`; absent authors count
+ * as version 0.
+ */
+export type VersionVector = Record<string, number>;
+
 export interface SyncAdapter {
-  getChanges(lastVersion: number): Promise<Change[]>;
+  /** Every stored change not covered by `have`, own and third-party alike. */
+  getChanges(have: VersionVector): Promise<Change[]>;
+  /**
+   * Persist changes received from a peer. Must be idempotent: simultaneous
+   * bidirectional syncs can deliver the same change twice.
+   */
   applyChanges(changes: Change[]): Promise<void>;
-  getVersion(): Promise<number>;
-  setVersion(version: number): Promise<void>;
+  /** The vector covering every change currently stored on this device. */
+  getVersionVector(): Promise<VersionVector>;
 }
+
+export type PeerSyncOptions = {
+  deviceId: string;
+  deviceName: string;
+  appId: string;
+  adapter: SyncAdapter;
+};
 
 export type Device = {
   id: string;
@@ -35,14 +62,16 @@ export type Device = {
  */
 export type SyncRequest =
   | { type: 'HELLO'; deviceId: string; deviceName: string }
-  | { type: 'REQUEST_METADATA' }
-  | { type: 'REQUEST_CHANGES'; sinceVersion: number }
+  | { type: 'REQUEST_CHANGES'; have: VersionVector }
   | { type: 'PUSH_CHANGES'; changes: Change[] };
 
 export type SyncResponse =
   | { type: 'HELLO_ACK'; deviceId: string }
-  | { type: 'DATABASE_VERSION'; version: number }
-  | { type: 'CHANGES_RESPONSE'; changes: Change[] }
+  /**
+   * The changes the requester lacks, plus the responder's own vector so the
+   * requester knows exactly what to push back.
+   */
+  | { type: 'CHANGES_RESPONSE'; changes: Change[]; have: VersionVector }
   | { type: 'ACK' }
   | { type: 'ERROR'; message: string };
 
