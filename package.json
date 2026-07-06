@@ -2,6 +2,26 @@
   "name": "tablito",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "scripts": {
+    "start": "expo start",
+    "reset-project": "node ./scripts/reset-project.js",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "expo lint",
+    "build-android-debug": "eas build --platform android --profile development:device --local",
+    "build-android-debug-cache": "EAS_LOCAL_BUILD_WORKINGDIR=~/eas-local-builds eas build --platform android --profile development:device --local",
+    "build-android": "eas build -p android --profile production --clear-cache",
+    "build-android-nowait": "eas build -p android --profile production --clear-cache --no-wait",
+    "build-android-local": "eas build -p android --profile production --local --clear-cache",
+    "build-android-local-cache": "EAS_LOCAL_BUILD_WORKINGDIR=~/eas-local-builds eas build -p android --profile production --local --clear-cache",
+    "build-android-apk": "eas build -p android --profile production-apk --clear-cache",
+    "build-android-apk-local": "eas build -p android --profile production-apk --local --clear-cache",
+    "submit-android": "eas submit --platform android",
+    "build-android-preview": "eas build -p android --profile preview",
+    "build-android-preview-local": "bash -c 'set -a; source .env; set +a; eas build -p android --profile preview --local",
+    "build-android-preview-local-cache": "bash -c 'set -a; source .env; set +a; EAS_LOCAL_BUILD_WORKINGDIR=~/eas-local-builds eas build -p android --profile preview --local'"
+  },
   "dependencies": {
     "@expo/ui": "~57.0.3",
     "expo": "~57.0.2",
@@ -29,15 +49,9 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.0",
     "typescript": "~6.0.3"
-  },
-  "scripts": {
-    "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
   },
   "private": true
 }

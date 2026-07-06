@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.jubinganga.tablito",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -24,6 +25,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./modules/expo-peer-sync/app.plugin.js",
       "expo-router",
       [
         "expo-splash-screen",
@@ -37,6 +39,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a978aa3a-40d3-4afc-b0b5-3b3dca1c073b"
+      }
+    },
+    "owner": "pablopirata"
   }
 }
