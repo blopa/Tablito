@@ -44,9 +44,7 @@ public class ExpoPeerSyncModule: Module {
       self.browser = nil
     }
 
-    // Bonjour resolves the service name to an address at connect time, so the
-    // host/port that Android needs are unused here.
-    AsyncFunction("connect") { (name: String, _: String, _: Int, promise: Promise) in
+    AsyncFunction("connect") { (name: String, promise: Promise) in
       self.connect(toServiceNamed: name, promise: promise)
     }
 

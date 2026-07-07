@@ -13,8 +13,6 @@ import {
 
 type NativeDeviceFoundEvent = {
   name: string;
-  host?: string;
-  port?: number;
   attributes: Record<string, string>;
 };
 
@@ -30,9 +28,7 @@ type ExpoPeerSyncNativeModule = NativeModule<ExpoPeerSyncModuleEvents> & {
   stopHosting(): Promise<void>;
   startDiscovery(): Promise<void>;
   stopDiscovery(): Promise<void>;
-  // Android connects to the resolved host/port; iOS connects to the Bonjour
-  // service by name and ignores host/port.
-  connect(name: string, host: string, port: number): Promise<string>;
+  connect(name: string): Promise<string>;
   disconnect(connectionId: string): Promise<void>;
   sendMessage(connectionId: string, message: string): Promise<void>;
 };
@@ -122,7 +118,7 @@ export class PeerSync {
     const device = this.discoveredDevices.get(deviceId);
     if (!device) throw new Error(`Device ${deviceId} not found`);
 
-    const connectionId = await native.connect(device.name, device.host ?? '', device.port ?? 0);
+    const connectionId = await native.connect(device.name);
     try {
       const ack = await this.request(
         connectionId,
@@ -139,9 +135,9 @@ export class PeerSync {
   async disconnect(deviceId: string) {
     const connectionId = this.deviceToConnection.get(deviceId);
     if (!connectionId) return;
+    // Map cleanup and the 'disconnected' event happen in onDisconnected,
+    // triggered by the native close notification.
     await native.disconnect(connectionId);
-    this.deviceToConnection.delete(deviceId);
-    this.connectionToDevice.delete(connectionId);
   }
 
   async sync(targetDeviceId?: string) {
@@ -287,8 +283,6 @@ export class PeerSync {
     const device: Device = {
       id: deviceId,
       name: event.name,
-      host: event.host,
-      port: event.port,
       attributes: event.attributes,
     };
     this.discoveredDevices.set(deviceId, device);

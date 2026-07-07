@@ -19,6 +19,6 @@
   ],
   "exclude": [
     "node_modules",
-    "modules"
+    "modules/expo-peer-sync/example"
   ]
 }

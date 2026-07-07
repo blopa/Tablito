@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
+import { FlatList, Pressable, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,19 +9,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { getPeerSyncStore, Item } from '@/lib/peer-sync-store';
 
 export default function SyncScreen() {
-  if (Platform.OS === 'web') {
-    return (
-      <ThemedView style={[styles.container, styles.centered]}>
-        <ThemedText themeColor="textSecondary">
-          Peer sync needs a real device — open this tab on Android or iOS.
-        </ThemedText>
-      </ThemedView>
-    );
-  }
-  return <SyncDemo />;
-}
-
-function SyncDemo() {
   const store = getPeerSyncStore();
   const { deviceId, items, peers, status, syncing } = useSyncExternalStore(
     store.subscribe,
@@ -140,10 +127,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-  },
-  centered: {
-    justifyContent: 'center',
-    padding: Spacing.four,
   },
   safeArea: {
     flex: 1,

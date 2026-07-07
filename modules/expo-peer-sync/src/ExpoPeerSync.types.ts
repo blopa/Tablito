@@ -46,13 +46,6 @@ export type PeerSyncOptions = {
 export type Device = {
   id: string;
   name: string;
-  /**
-   * Resolved address of the peer. Android (NSD) resolves these during
-   * discovery; iOS (Bonjour) connects by service name instead, so they may
-   * be absent there.
-   */
-  host?: string;
-  port?: number;
   attributes: Record<string, string>;
 };
 

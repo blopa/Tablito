@@ -1,5 +1,7 @@
 package expo.modules.peersync
 
+import expo.modules.kotlin.Promise
+import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.peersync.discovery.NSDHelper
@@ -27,8 +29,6 @@ class ExpoPeerSyncModule : Module() {
       onDeviceFound = { serviceInfo ->
         sendEvent("deviceFound", mapOf(
           "name" to serviceInfo.serviceName,
-          "host" to serviceInfo.host.hostAddress,
-          "port" to serviceInfo.port,
           "attributes" to serviceInfo.attributes.mapValues { String(it.value) }
         ))
       },
@@ -45,9 +45,16 @@ class ExpoPeerSyncModule : Module() {
 
     Events("deviceFound", "deviceLost", "messageReceived", "disconnected")
 
-    AsyncFunction("startHosting") { name: String, txtRecords: Map<String, String> ->
+    AsyncFunction("startHosting") { name: String, txtRecords: Map<String, String>, promise: Promise ->
       val port = transport.startServer()
-      nsdHelper.registerService(name, port, txtRecords)
+      nsdHelper.registerService(name, port, txtRecords) { error ->
+        if (error == null) {
+          promise.resolve(null)
+        } else {
+          transport.stopServer()
+          promise.reject(CodedException(error))
+        }
+      }
     }
 
     AsyncFunction("stopHosting") {
@@ -55,18 +62,22 @@ class ExpoPeerSyncModule : Module() {
       transport.stopServer()
     }
 
-    AsyncFunction("startDiscovery") {
-      nsdHelper.discoverServices()
+    AsyncFunction("startDiscovery") { promise: Promise ->
+      nsdHelper.discoverServices { error ->
+        if (error == null) promise.resolve(null) else promise.reject(CodedException(error))
+      }
     }
 
     AsyncFunction("stopDiscovery") {
       nsdHelper.stopDiscovery()
     }
 
-    // The service name addresses peers on iOS (Bonjour); Android connects to
-    // the host/port resolved during discovery.
-    AsyncFunction("connect") { _: String, host: String, port: Int ->
-      return@AsyncFunction transport.connect(host, port)
+    AsyncFunction("connect") { name: String ->
+      val service = nsdHelper.resolvedService(name)
+        ?: throw CodedException("Unknown service '$name'")
+      val host = service.host?.hostAddress
+        ?: throw CodedException("Service '$name' has no resolved address")
+      return@AsyncFunction transport.connect(host, service.port)
     }
 
     AsyncFunction("sendMessage") { connectionId: String, message: String ->

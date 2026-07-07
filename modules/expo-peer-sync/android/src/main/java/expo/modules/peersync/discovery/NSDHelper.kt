@@ -4,13 +4,27 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
 
-class NSDHelper(context: Context, private val onDeviceFound: (NsdServiceInfo) -> Unit, private val onDeviceLost: (NsdServiceInfo) -> Unit) {
+class NSDHelper(
+    context: Context,
+    private val onDeviceFound: (NsdServiceInfo) -> Unit,
+    private val onDeviceLost: (NsdServiceInfo) -> Unit
+) {
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
+    private val resolvedServices = ConcurrentHashMap<String, NsdServiceInfo>()
 
-    fun registerService(name: String, port: Int, txtRecords: Map<String, String>) {
+    /** The resolved address of a discovered service, if we have seen it. */
+    fun resolvedService(name: String): NsdServiceInfo? = resolvedServices[name]
+
+    fun registerService(
+        name: String,
+        port: Int,
+        txtRecords: Map<String, String>,
+        onResult: (error: String?) -> Unit
+    ) {
         // NsdManager rejects a listener that is already registered.
         unregisterService()
 
@@ -24,45 +38,66 @@ class NSDHelper(context: Context, private val onDeviceFound: (NsdServiceInfo) ->
         }
 
         registrationListener = object : NsdManager.RegistrationListener {
-            override fun onServiceRegistered(NsdServiceInfo: NsdServiceInfo) {
-                Log.d("NSDHelper", "Service registered: ${NsdServiceInfo.serviceName}")
+            private var settled = false
+
+            override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
+                Log.d(TAG, "Service registered: ${serviceInfo.serviceName}")
+                if (!settled) {
+                    settled = true
+                    onResult(null)
+                }
             }
 
             override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                Log.e("NSDHelper", "Registration failed: $errorCode")
+                Log.e(TAG, "Registration failed: $errorCode")
+                if (registrationListener == this) registrationListener = null
+                if (!settled) {
+                    settled = true
+                    onResult("NSD registration failed with error code $errorCode")
+                }
             }
 
-            override fun onServiceUnregistered(arg0: NsdServiceInfo) {
-                Log.d("NSDHelper", "Service unregistered")
+            override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {
+                Log.d(TAG, "Service unregistered")
             }
 
             override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                Log.e("NSDHelper", "Unregistration failed: $errorCode")
+                Log.e(TAG, "Unregistration failed: $errorCode")
             }
         }
 
         nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
     }
 
-    fun discoverServices() {
+    fun discoverServices(onResult: (error: String?) -> Unit) {
         // NsdManager throws if discovery is started twice with the same listener.
-        if (discoveryListener != null) return
+        if (discoveryListener != null) {
+            onResult(null)
+            return
+        }
 
         discoveryListener = object : NsdManager.DiscoveryListener {
+            private var settled = false
+
             override fun onDiscoveryStarted(regType: String) {
-                Log.d("NSDHelper", "Service discovery started")
+                Log.d(TAG, "Service discovery started")
+                if (!settled) {
+                    settled = true
+                    onResult(null)
+                }
             }
 
             override fun onServiceFound(service: NsdServiceInfo) {
-                Log.d("NSDHelper", "Service found: ${service.serviceName}")
+                Log.d(TAG, "Service found: ${service.serviceName}")
                 if (service.serviceType == SERVICE_TYPE) {
                     nsdManager.resolveService(service, object : NsdManager.ResolveListener {
                         override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                            Log.e("NSDHelper", "Resolve failed: $errorCode")
+                            Log.e(TAG, "Resolve failed: $errorCode")
                         }
 
                         override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
-                            Log.d("NSDHelper", "Service resolved: ${serviceInfo.serviceName}")
+                            Log.d(TAG, "Service resolved: ${serviceInfo.serviceName}")
+                            resolvedServices[serviceInfo.serviceName] = serviceInfo
                             onDeviceFound(serviceInfo)
                         }
                     })
@@ -70,21 +105,26 @@ class NSDHelper(context: Context, private val onDeviceFound: (NsdServiceInfo) ->
             }
 
             override fun onServiceLost(service: NsdServiceInfo) {
-                Log.d("NSDHelper", "Service lost: ${service.serviceName}")
+                Log.d(TAG, "Service lost: ${service.serviceName}")
+                resolvedServices.remove(service.serviceName)
                 onDeviceLost(service)
             }
 
             override fun onDiscoveryStopped(serviceType: String) {
-                Log.i("NSDHelper", "Discovery stopped: $serviceType")
+                Log.i(TAG, "Discovery stopped: $serviceType")
             }
 
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.e("NSDHelper", "Discovery failed: Error code:$errorCode")
-                discoveryListener = null
+                Log.e(TAG, "Discovery failed: Error code:$errorCode")
+                if (discoveryListener == this) discoveryListener = null
+                if (!settled) {
+                    settled = true
+                    onResult("NSD discovery failed with error code $errorCode")
+                }
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                Log.e("NSDHelper", "Stop discovery failed: Error code:$errorCode")
+                Log.e(TAG, "Stop discovery failed: Error code:$errorCode")
                 nsdManager.stopServiceDiscovery(this)
             }
         }
@@ -107,6 +147,7 @@ class NSDHelper(context: Context, private val onDeviceFound: (NsdServiceInfo) ->
     }
 
     companion object {
+        private const val TAG = "NSDHelper"
         private const val SERVICE_TYPE = "_expo-peer-sync._tcp."
     }
 }
