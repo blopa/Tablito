@@ -114,6 +114,21 @@ class PeerSyncStore {
     ]);
   }
 
+  async refresh() {
+    if (!this.started) {
+      await this.start();
+      return;
+    }
+    this.peers.clear();
+    this.setStatus('Searching…', false);
+    try {
+      await this.peerSync.rescan();
+      this.setStatus(`Visible as “${deviceName}”`, false);
+    } catch (error) {
+      this.setStatus(`Search failed: ${errorMessage(error)}`, false);
+    }
+  }
+
   async syncWith(peerId: string) {
     this.setStatus('Connecting…', true);
     try {

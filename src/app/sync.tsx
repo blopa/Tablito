@@ -53,7 +53,10 @@ export default function SyncScreen() {
         </ThemedView>
 
         <ThemedView type="backgroundElement" style={styles.peersCard}>
-          <ThemedText type="smallBold">Nearby devices</ThemedText>
+          <ThemedView type="backgroundElement" style={styles.peersHeader}>
+            <ThemedText type="smallBold">Nearby devices</ThemedText>
+            <ActionButton label="Find devices" onPress={() => store.refresh()} />
+          </ThemedView>
           {peers.length === 0 ? (
             <ThemedText type="small" themeColor="textSecondary">
               Searching on this Wi-Fi…
@@ -155,6 +158,12 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     padding: Spacing.three,
     borderRadius: Spacing.three,
+  },
+  peersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
   },
   peerRow: {
     flexDirection: 'row',

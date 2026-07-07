@@ -16,6 +16,13 @@ class NSDHelper(
     private var discoveryListener: NsdManager.DiscoveryListener? = null
     private val resolvedServices = ConcurrentHashMap<String, NsdServiceInfo>()
 
+    // NsdManager can only resolve one service at a time; overlapping
+    // resolveService calls corrupt each other's results (a peer's host comes
+    // back as the local device's address). Discovery finds every service on the
+    // network at once — including our own — so we must resolve them serially.
+    private val resolveQueue = ArrayDeque<NsdServiceInfo>()
+    private var resolving = false
+
     /** The resolved address of a discovered service, if we have seen it. */
     fun resolvedService(name: String): NsdServiceInfo? = resolvedServices[name]
 
@@ -90,17 +97,7 @@ class NSDHelper(
             override fun onServiceFound(service: NsdServiceInfo) {
                 Log.d(TAG, "Service found: ${service.serviceName}")
                 if (service.serviceType == SERVICE_TYPE) {
-                    nsdManager.resolveService(service, object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                            Log.e(TAG, "Resolve failed: $errorCode")
-                        }
-
-                        override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
-                            Log.d(TAG, "Service resolved: ${serviceInfo.serviceName}")
-                            resolvedServices[serviceInfo.serviceName] = serviceInfo
-                            onDeviceFound(serviceInfo)
-                        }
-                    })
+                    enqueueResolve(service)
                 }
             }
 
@@ -137,6 +134,39 @@ class NSDHelper(
             nsdManager.stopServiceDiscovery(it)
             discoveryListener = null
         }
+        // Drop anything still queued; the in-flight resolve (if any) will drain
+        // the now-empty queue when it calls back.
+        synchronized(resolveQueue) { resolveQueue.clear() }
+    }
+
+    private fun enqueueResolve(service: NsdServiceInfo) {
+        synchronized(resolveQueue) {
+            resolveQueue.addLast(service)
+            if (!resolving) resolveNextLocked()
+        }
+    }
+
+    // Must be called while holding the resolveQueue monitor.
+    private fun resolveNextLocked() {
+        val service = resolveQueue.removeFirstOrNull()
+        if (service == null) {
+            resolving = false
+            return
+        }
+        resolving = true
+        nsdManager.resolveService(service, object : NsdManager.ResolveListener {
+            override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                Log.e(TAG, "Resolve failed: $errorCode")
+                synchronized(resolveQueue) { resolveNextLocked() }
+            }
+
+            override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+                Log.d(TAG, "Service resolved: ${serviceInfo.serviceName}")
+                resolvedServices[serviceInfo.serviceName] = serviceInfo
+                onDeviceFound(serviceInfo)
+                synchronized(resolveQueue) { resolveNextLocked() }
+            }
+        })
     }
 
     fun unregisterService() {

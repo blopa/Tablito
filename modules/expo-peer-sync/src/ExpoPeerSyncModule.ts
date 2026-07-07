@@ -113,6 +113,16 @@ export class PeerSync {
     await native.stopDiscovery();
   }
 
+  /**
+   * Forget known peers and restart discovery so the caller can re-scan the
+   * network on demand. Present peers re-appear via `deviceFound`.
+   */
+  async rescan() {
+    this.discoveredDevices.clear();
+    await native.stopDiscovery();
+    await native.startDiscovery();
+  }
+
   async connect(deviceId: string) {
     if (this.deviceToConnection.has(deviceId)) return;
     const device = this.discoveredDevices.get(deviceId);
