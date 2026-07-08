@@ -31,6 +31,7 @@ export type PeerSyncSnapshot = {
 // lives only in memory, so a relaunch is a brand-new "user".
 const deviceId = Math.random().toString(36).slice(2, 10);
 const deviceName = `${Device.deviceName ?? Platform.OS}-${deviceId.slice(0, 4)}`;
+const SEARCH_STATUS_TIMEOUT_MS = 5000;
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -45,6 +46,8 @@ class PeerSyncStore {
   private status = 'Starting…';
   private syncing = false;
   private started = false;
+  private searching = false;
+  private searchStatusTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshot: PeerSyncSnapshot;
 
   constructor() {
@@ -72,11 +75,21 @@ class PeerSyncStore {
 
     this.peerSync.on('deviceFound', (peer) => {
       this.peers.set(peer.id, peer);
-      this.notify();
+      this.searching = false;
+      this.clearSearchStatusTimer();
+      this.setStatus(`Found ${this.peers.size} nearby device${this.peers.size === 1 ? '' : 's'}`);
     });
     this.peerSync.on('deviceLost', (peer) => {
       this.peers.delete(peer.id);
-      this.notify();
+      if (this.searching) {
+        this.notify();
+        return;
+      }
+      this.setStatus(
+        this.peers.size === 0
+          ? `Visible as "${deviceName}"`
+          : `Found ${this.peers.size} nearby device${this.peers.size === 1 ? '' : 's'}`
+      );
     });
     this.peerSync.on('syncStarted', () => this.setStatus('Syncing…', true));
     this.peerSync.on('syncFinished', () => this.setStatus('Synced', false));
@@ -89,11 +102,14 @@ class PeerSyncStore {
     if (this.started) return;
     this.started = true;
     try {
+      this.beginSearchStatus();
       await this.peerSync.startHosting();
       await this.peerSync.startDiscovery();
-      this.setStatus(`Visible as “${deviceName}”`);
+      this.scheduleEmptySearchStatus();
     } catch (error) {
       this.started = false;
+      this.searching = false;
+      this.clearSearchStatusTimer();
       this.setStatus(`Failed to start: ${errorMessage(error)}`);
     }
   }
@@ -120,11 +136,13 @@ class PeerSyncStore {
       return;
     }
     this.peers.clear();
-    this.setStatus('Searching…', false);
+    this.beginSearchStatus();
     try {
       await this.peerSync.rescan();
-      this.setStatus(`Visible as “${deviceName}”`, false);
+      this.scheduleEmptySearchStatus();
     } catch (error) {
+      this.searching = false;
+      this.clearSearchStatusTimer();
       this.setStatus(`Search failed: ${errorMessage(error)}`, false);
     }
   }
@@ -161,6 +179,30 @@ class PeerSyncStore {
     this.status = status;
     this.syncing = syncing;
     this.notify();
+  }
+
+  private beginSearchStatus() {
+    this.searching = true;
+    this.clearSearchStatusTimer();
+    this.setStatus('Searching…', false);
+  }
+
+  private scheduleEmptySearchStatus() {
+    this.clearSearchStatusTimer();
+    this.searchStatusTimer = setTimeout(() => {
+      this.searchStatusTimer = null;
+      this.searching = false;
+      if (this.peers.size === 0) {
+        this.setStatus(`No devices found yet. Visible as "${deviceName}"`, false);
+      }
+    }, SEARCH_STATUS_TIMEOUT_MS);
+  }
+
+  private clearSearchStatusTimer() {
+    if (this.searchStatusTimer) {
+      clearTimeout(this.searchStatusTimer);
+      this.searchStatusTimer = null;
+    }
   }
 
   private buildSnapshot(): PeerSyncSnapshot {

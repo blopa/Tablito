@@ -3,6 +3,7 @@ package expo.modules.peersync.discovery
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
@@ -12,8 +13,11 @@ class NSDHelper(
     private val onDeviceLost: (NsdServiceInfo) -> Unit
 ) {
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
+    private var multicastUsers = 0
     private val resolvedServices = ConcurrentHashMap<String, NsdServiceInfo>()
 
     // NsdManager can only resolve one service at a time; overlapping
@@ -44,6 +48,8 @@ class NSDHelper(
             }
         }
 
+        acquireMulticastLock()
+
         registrationListener = object : NsdManager.RegistrationListener {
             private var settled = false
 
@@ -58,6 +64,7 @@ class NSDHelper(
             override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
                 Log.e(TAG, "Registration failed: $errorCode")
                 if (registrationListener == this) registrationListener = null
+                releaseMulticastLock()
                 if (!settled) {
                     settled = true
                     onResult("NSD registration failed with error code $errorCode")
@@ -73,7 +80,13 @@ class NSDHelper(
             }
         }
 
-        nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+        try {
+            nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
+        } catch (error: Exception) {
+            registrationListener = null
+            releaseMulticastLock()
+            onResult("NSD registration failed: ${error.message ?: error.javaClass.simpleName}")
+        }
     }
 
     fun discoverServices(onResult: (error: String?) -> Unit) {
@@ -82,6 +95,8 @@ class NSDHelper(
             onResult(null)
             return
         }
+
+        acquireMulticastLock()
 
         discoveryListener = object : NsdManager.DiscoveryListener {
             private var settled = false
@@ -114,6 +129,7 @@ class NSDHelper(
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Log.e(TAG, "Discovery failed: Error code:$errorCode")
                 if (discoveryListener == this) discoveryListener = null
+                releaseMulticastLock()
                 if (!settled) {
                     settled = true
                     onResult("NSD discovery failed with error code $errorCode")
@@ -126,13 +142,20 @@ class NSDHelper(
             }
         }
 
-        nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+        try {
+            nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+        } catch (error: Exception) {
+            discoveryListener = null
+            releaseMulticastLock()
+            onResult("NSD discovery failed: ${error.message ?: error.javaClass.simpleName}")
+        }
     }
 
     fun stopDiscovery() {
         discoveryListener?.let {
-            nsdManager.stopServiceDiscovery(it)
+            runCatching { nsdManager.stopServiceDiscovery(it) }
             discoveryListener = null
+            releaseMulticastLock()
         }
         // Drop anything still queued; the in-flight resolve (if any) will drain
         // the now-empty queue when it calls back.
@@ -171,8 +194,42 @@ class NSDHelper(
 
     fun unregisterService() {
         registrationListener?.let {
-            nsdManager.unregisterService(it)
+            runCatching { nsdManager.unregisterService(it) }
             registrationListener = null
+            releaseMulticastLock()
+        }
+    }
+
+    private fun acquireMulticastLock() {
+        synchronized(this) {
+            multicastUsers += 1
+            val lock = multicastLock ?: wifiManager?.createMulticastLock(TAG)?.apply {
+                setReferenceCounted(false)
+            }?.also {
+                multicastLock = it
+            }
+            if (lock?.isHeld == false) {
+                try {
+                    lock.acquire()
+                } catch (error: Exception) {
+                    Log.w(TAG, "Unable to acquire multicast lock", error)
+                    multicastLock = null
+                }
+            }
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        synchronized(this) {
+            if (multicastUsers > 0) multicastUsers -= 1
+            if (multicastUsers == 0) {
+                multicastLock?.let { lock ->
+                    if (lock.isHeld) {
+                        runCatching { lock.release() }
+                    }
+                }
+                multicastLock = null
+            }
         }
     }
 
